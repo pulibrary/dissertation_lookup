@@ -8,17 +8,18 @@ require 'nokogiri'
 
 require 'pry'
 
-def lookup_by_title(title)
+HOST = "https://dataspace.princeton.edu"
 
-  host = "https://dataspace.princeton.edu"
-  uri = URI.parse("#{host}/rest/items/find-by-metadata-field")
+
+def fetch_response(title, language = "")
+  uri = URI.parse("#{HOST}/rest/items/find-by-metadata-field")
   request = Net::HTTP::Post.new(uri)
   request.content_type = "application/json"
   request["Accept"] = "application/json"
   request.body = JSON.dump({
     "key" => "dc.title",
     "value" => title,
-    "language" => ""
+    "language" => language
   })
 
   req_options = {
@@ -30,11 +31,26 @@ def lookup_by_title(title)
     http.request(request)
   end
 
+
+end
+
+def lookup_by_title(title)
+
+  response = fetch_response(title)
+
+  languages = ["", "en", "en_US"]
+
+  languages.each do |language|
+    response = fetch_response(title, language)
+    break if response.body != "[]"
+  end
+
   if response.code == "200"
+
     results = JSON.parse(response.body)
 
     results.each do |result|
-      result_uri = URI.parse("#{host}/#{result['link']}/metadata")
+      result_uri = URI.parse("#{HOST}/#{result['link']}/metadata")
       result_response = Net::HTTP.get_response(result_uri)
       xml_payload = JSON.parse(result_response.body)
 
@@ -45,7 +61,7 @@ def lookup_by_title(title)
         puts "#{title}\t#{ark}\n"
 
       else
-        puts "Not a dissertation, exiting"
+        puts "#{title} - Match found in DataSpace but *NOT* a dissertation, skipping..."
       end
     end
 
@@ -53,8 +69,6 @@ def lookup_by_title(title)
     puts "Response code: #{response.code}, exiting"
   end
 end
-
-
 
 titles = File.open('manifest').readlines
 
